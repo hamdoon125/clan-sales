@@ -1126,6 +1126,17 @@ async function aDashPage() {
       ${d.scope === 'super_admin' ? `<div class="stat"><small>الموظفين</small><b>${num(d.team_size)}</b></div>` : ''}
     </div>
   </div>
+  ${d.daily && d.daily.length === 30 ? `<div class="card" id="d-charts">
+    <div class="head"><h2>آخر 30 يوم${d.scope === 'admin' ? ' (فريقك)' : ''}</h2><span class="muted" style="font-size:13px">دوس على أي يوم تشوف رقمه</span></div>
+    <div class="dcharts">
+      ${dayChart('leads', 'طلبات العملا', 'طلب', d.daily, d.prev30 && Number(d.prev30.leads))}
+      ${dayChart('sales', 'البيعات', 'بيعة', d.daily, d.prev30 && Number(d.prev30.sales))}
+    </div>
+    <details class="dc-table"><summary>اعرض الأرقام كجدول</summary>
+      <div class="tablewrap"><table class="ptbl"><thead><tr><th>اليوم</th><th>طلبات</th><th>بيعات</th></tr></thead>
+      <tbody>${d.daily.slice().reverse().map(x => `<tr><td>${dayLbl(x.d)}</td><td>${num(x.leads)}</td><td>${num(x.sales)}</td></tr>`).join('')}</tbody></table></div>
+    </details>
+  </div>` : ''}
   <div class="card"><h2>محتاجين يتحوّلهم</h2>
     <div class="list" id="owed">${d.owed.length ? d.owed.map(m => `
       <div class="item"><div class="main"><b>${esc(m.name)} <span class="ltr sub">${esc(m.code)}</span></b><span class="sub">${esc(m.pay_method || '')} · <span class="ltr">${esc(m.pay_number || '')}</span>${m.payout_verified ? '' : ' · <span class="pill no">رقم مش متأكد</span>'}</span></div>
@@ -1138,6 +1149,7 @@ async function aDashPage() {
       <div class="end">${pill(s.status)}</div></div>`).join('') : emptyState('coins', 'لسه مفيش بيعات', 'أول بيعة تتسجل هتظهر هنا.', '<a class="btn sm" href="#a-sale">سجّل بيعة</a>')}</div>
   </div>`);
   $('#d-ref').addEventListener('click', route);
+  if ($('#d-charts')) wireCharts($('#d-charts'));
   $('#owed').addEventListener('click', e => { const b = e.target.closest('[data-pay]'); if (b) { PREFILL = b.dataset.pay; location.hash = 'a-pay'; } });
   $('#d-exp').addEventListener('click', e => busy(e.target, 'بنجهّز…', exportCsv).catch(m => toast(m)));
 }
@@ -1224,6 +1236,41 @@ async function aPerfPage() {
   $('#pf-per').addEventListener('click', e => {
     const b = e.target.closest('[data-d]'); if (!b) return;
     PERF_DAYS = Number(b.dataset.d); route();
+  });
+}
+
+/* ---------------- رسم بياني: عمود لكل يوم ---------------- */
+const dayLbl = d => new Date(d + 'T12:00:00').toLocaleDateString('ar-EG-u-nu-latn', { day: 'numeric', month: 'long' });
+function dayChart(key, title, unit, days, prev) {
+  const vals = days.map(x => Number(x[key]) || 0), total = vals.reduce((a, b) => a + b, 0);
+  const max = Math.max(...vals, 1), top = Math.max(2, Math.ceil(max / 2) * 2); // رقم زوجي عشان نص المحور يبقى رقم صحيح
+  const diff = prev ? Math.round((total - prev) * 100 / prev) : null;
+  const trend = diff === null ? '' : diff === 0 ? 'زي الـ 30 يوم اللي قبلها'
+    : `${diff > 0 ? '↑' : '↓'} ${Math.abs(diff)}% عن الـ 30 يوم اللي قبلها`;
+  return `<div class="dchart" data-key="${key}">
+    <div class="dc-head"><span class="dc-t">${title}</span><b class="dc-n">${num(total)}</b>${trend ? `<span class="dc-tr ${diff > 0 ? 'up' : diff < 0 ? 'down' : ''}">${trend}</span>` : ''}</div>
+    <div class="dc-plot" role="img" aria-label="${title}: ${num(total)} في آخر 30 يوم">
+      <span class="dc-grid" style="bottom:100%"><i>${num(top)}</i></span><span class="dc-grid" style="bottom:50%"><i>${num(top / 2)}</i></span>
+      <div class="dc-bars">${days.map((x, i) => `<span class="dc-col${i === days.length - 1 ? ' today' : ''}" data-i="${i}" data-tip="${dayLbl(x.d)} · ${num(vals[i])} ${unit}"><i style="height:${vals[i] ? Math.max(3, vals[i] * 100 / top) : 0}%"></i></span>`).join('')}</div>
+      <div class="dc-tip" hidden></div>
+    </div>
+    <div class="dc-x"><span>${dayLbl(days[0].d)}</span><span>${dayLbl(days[14].d)}</span><span>النهارده</span></div>
+  </div>`;
+}
+function wireCharts(root) {
+  root.querySelectorAll('.dc-plot').forEach(plot => {
+    const tip = plot.querySelector('.dc-tip');
+    const show = col => {
+      plot.querySelectorAll('.dc-col.on').forEach(c => c.classList.remove('on'));
+      if (!col) { tip.hidden = true; return; }
+      col.classList.add('on'); tip.textContent = col.dataset.tip; tip.hidden = false;
+      const p = plot.getBoundingClientRect(), c = col.getBoundingClientRect();
+      const x = c.left + c.width / 2 - p.left, w = tip.offsetWidth;
+      tip.style.left = Math.min(Math.max(x - w / 2, 0), p.width - w) + 'px';
+    };
+    plot.addEventListener('pointermove', e => show(e.target.closest('.dc-col')));
+    plot.addEventListener('pointerdown', e => show(e.target.closest('.dc-col')));
+    plot.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') show(null); });
   });
 }
 
