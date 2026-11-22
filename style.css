@@ -428,3 +428,6 @@ form.reqbox { display: grid; justify-content: stretch; }
   .ptbl { font-size: 13px; }
   .ptbl th, .ptbl td { padding: 9px 7px; }
 }
+
+/* مسح طلب (السوبر) */
+.ldel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px dashed var(--line); padding-top: 12px; font-size: 13px; }

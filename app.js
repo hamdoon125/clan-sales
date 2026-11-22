@@ -31,7 +31,7 @@ const ACTIONS = {
   content_add: 'أضاف محتوى', content_edit: 'عدّل محتوى', content_delete: 'مسح محتوى', news_add: 'نشر خبر', news_edit: 'عدّل خبر',
   news_pin: 'ثبّت خبر', news_unpin: 'شال تثبيت خبر', news_delete: 'مسح خبر', export: 'صدّر بيانات', update_payout_info: 'غيّر رقم التحويل', verify_payout: 'أكّد رقم تحويل', backup: 'نزّل نسخة احتياطية',
   lead_add: 'سجّل عميل جديد', lead_assign: 'وزّع طلب', lead_status: 'غيّر حالة طلب',
-  payout_request: 'طلب صرف عمولة', payout_request_cancel: 'لغى طلب صرف', payout_request_reject: 'رفض طلب صرف'
+  payout_request: 'طلب صرف عمولة', payout_request_cancel: 'لغى طلب صرف', payout_request_reject: 'رفض طلب صرف', lead_delete: 'مسح طلب عميل'
 };
 const isStaff = () => ME && STAFF.includes(ME.role);
 const isAdmin = () => ME && ADMINS.includes(ME.role);
@@ -1724,6 +1724,7 @@ async function aLogPage() {
   const detail = r => {
     const d = r.details || {};
     if (r.action === 'add_sale' || r.action === 'cancel_sale') return `بيعة رقم ${esc(d.sale_id)}${d.client ? ' · ' + esc(d.client) : ''}${d.amount ? ' · ' + money(d.amount) : ''}${d.forced ? ' · رغم التكرار' : ''}`;
+    if (r.action === 'lead_delete') return `طلب رقم ${esc(d.lead_id)} · ${esc(d.client || '')}${d.phone ? ' · <span class="ltr">' + esc(d.phone) + '</span>' : ''}${d.status ? ' · كان ' + esc(LEAD_ST[d.status] || d.status) : ''}`;
     if (r.action === 'payout') return `${money(d.amount)}${d.to ? ' على <span class="ltr">' + esc(d.to) + '</span>' : ''}`;
     if (r.action === 'set_role') return `من ${esc(ROLES[d.from] || d.from)} لـ ${esc(ROLES[d.to] || d.to)}`;
     if (r.action === 'fire') return `كان ${esc(ROLES[d.was] || d.was)}`;
@@ -2067,6 +2068,9 @@ async function aLeadsPage() {
         ${r.status !== 'won' ? `<button type="button" class="btn gold" data-won="${r.id}">تم الديل ✓</button>` : ''}
         <span class="muted" style="font-size:13px">${r.status === 'won' ? `البيعة اتسجلت للمسوق${r.commission ? ' وعمولته ' + money(r.commission) : ''}.${isAdmin() ? ' لو غيّرت الحالة، البيعة هتتلغي.' : ''}` : 'لما تدوس «تم الديل»، البيعة والعمولة بتتسجل للمسوق لوحدها.'}</span>
       </div>
+      ${isSuper() ? `<div class="ldel">${r.status === 'won'
+        ? '<span class="muted">عشان تمسح الطلب ده، غيّر حالته الأول من «تم الديل» (البيعة وعمولتها هتتلغي).</span>'
+        : `<button type="button" class="btn danger sm" data-del="${r.id}">🗑 امسح الطلب</button><span class="muted">بيتشال من الطلبات ومن عند المسوق. بياناته بتفضل في سجل العمليات.</span>`}</div>` : ''}
     </div></td></tr>`;
   async function run(more) {
     showErr($('#l-err'), '');
@@ -2100,6 +2104,13 @@ async function aLeadsPage() {
     const cp = e.target.closest('[data-copy]'); if (cp) return copyText(cp.dataset.copy);
     const s = e.target.closest('[data-save]'); if (s) return save(s.dataset.save);
     const w = e.target.closest('[data-won]'); if (w && twoStep(w, 'متأكد إن العميل دفع؟')) return save(w.dataset.won, { won: true });
+    const dl = e.target.closest('[data-del]');
+    if (dl && twoStep(dl, 'متأكد؟ دوس تاني عشان يتمسح')) {
+      const id = dl.dataset.del;
+      busy(dl, 'بنمسح…', () => rpc('super_delete_lead', { p_id: Number(id) }))
+        .then(async () => { toast(`طلب #${id} اتمسح ✓`); delete data[id]; await loadMe().catch(() => {}); renderNav('a-leads'); run(false); })
+        .catch(m => toast(m));
+    }
   });
   $('#lt').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; st = b.dataset.s; $$('#lt button').forEach(x => x.classList.toggle('on', x === b)); run(false); });
   $('#lq').addEventListener('submit', e => { e.preventDefault(); run(false); });
