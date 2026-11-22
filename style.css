@@ -356,3 +356,75 @@ html.locked, html.locked body { overflow: hidden; }
   .tabbar a, .tabbar button { font-size: 11px; }
   .tabbar .ti { width: 44px; }
 }
+
+/* الإشعارات: الجرس في الهيدر */
+.who .bell { position: relative; display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; color: inherit; flex-shrink: 0; }
+.who .bell svg { width: 22px; height: 22px; }
+.who .bell:hover, .who .bell.on { background: rgba(255,255,255,.14); }
+.who .bell .bdot { position: absolute; top: 3px; inset-inline-end: 1px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 99px;
+  background: var(--gold); color: #1E1503; font: 700 11px/18px var(--f-body); text-align: center; max-width: none; overflow: visible; box-shadow: 0 0 0 2px var(--brand); }
+.notes .note-i { justify-content: flex-start; color: inherit; text-decoration: none; padding-inline: 8px; border-radius: 10px; }
+.notes a.note-i:hover { background: var(--sunk); }
+.notes .note-i.unread { background: var(--brand-soft); }
+.notes .note-i.unread b::after { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--gold); margin-inline-start: 8px; vertical-align: middle; }
+.note-ic { font-size: 22px; width: 36px; flex-shrink: 0; text-align: center; }
+
+/* QR كود رابط الإحالة */
+.qrbox { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.qrbox canvas { width: min(220px, 100%); height: auto; border-radius: 10px; background: #FFFFFF; box-shadow: 0 0 0 1px var(--line); }
+.qrbox .stack { flex: 1 1 220px; min-width: 0; }
+
+/* طلبات صرف العمولة */
+.reqbox { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; border: 1.5px solid var(--gold); background: var(--gold-soft); border-radius: 12px; padding: 14px; }
+.reqbox > .stack { flex: 1 1 260px; min-width: 0; }
+.reqbox.pending { border-style: dashed; }
+form.reqbox { display: grid; justify-content: stretch; }
+.rq-row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+.rq-row .f { flex: 1 1 160px; margin: 0; }
+.reqhist summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 6px 0; }
+.seg.sm button { padding: 5px 10px; font-size: 13px; }
+.preq { align-items: flex-start; }
+.preq .main { flex: 1; }
+.preq-act { display: grid; gap: 8px; margin-top: 8px; }
+.preq-act .rej { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.preq-act .rej .f { flex: 1 1 200px; margin: 0; }
+@media (max-width: 760px) {
+  .who .bell { width: 44px; height: 44px; }
+  .preq { flex-direction: column; }
+  .preq .end { justify-content: flex-start; }
+  .preq-act .actions .btn { flex: 1 1 auto; }
+}
+
+/* لوحة الأداء */
+.perf .stat b .sub { font: 600 13px var(--f-body); color: var(--muted); }
+.perf .stat .sub { color: var(--muted); font-size: 12px; }
+.perf .stat.warn { background: var(--bad-soft); border-color: transparent; }
+.srcs { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.src { background: var(--sunk); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.src-h { display: flex; align-items: center; gap: 8px; }
+.src-h b { flex: 1; }
+.src-ic { font-size: 18px; }
+.src-n { color: var(--muted); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.share, .pbar { display: block; height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.share i, .pbar i { display: block; height: 100%; background: var(--brand); border-radius: 99px; }
+.pbar { height: 5px; margin-top: 5px; max-width: 110px; }
+.pbar i { background: var(--good); }
+.src dl { display: grid; gap: 4px; margin: 0; }
+.src dl div { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.src dt { color: var(--muted); }
+.src dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ptbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ptbl th { text-align: right; font-weight: 600; color: var(--muted); font-size: 12.5px; background: var(--sunk); padding: 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ptbl td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ptbl tr:last-child td { border-bottom: 0; }
+.ptbl .sub { color: var(--muted); font-size: 12.5px; }
+.ptbl td:first-child { min-width: 9em; }
+.ptbl td:not(:first-child), .ptbl th:not(:first-child) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ptbl .pill { font-size: 11px; padding: 1px 8px; }
+.bad-t { color: var(--bad); font-weight: 600; }
+@media (max-width: 760px) {
+  .perf .head .seg { width: 100%; }
+  .perf .head .seg button { flex: 1 1 auto; padding: 7px 8px; }
+  .ptbl { font-size: 13px; }
+  .ptbl th, .ptbl td { padding: 9px 7px; }
+}

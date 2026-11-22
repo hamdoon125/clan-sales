@@ -30,7 +30,8 @@ const ACTIONS = {
   reset_password: 'غيّر باسورد', set_role: 'غيّر صلاحية', set_manager: 'نقل موظف لأدمن', fire: 'رفد', setting: 'غيّر إعداد',
   content_add: 'أضاف محتوى', content_edit: 'عدّل محتوى', content_delete: 'مسح محتوى', news_add: 'نشر خبر', news_edit: 'عدّل خبر',
   news_pin: 'ثبّت خبر', news_unpin: 'شال تثبيت خبر', news_delete: 'مسح خبر', export: 'صدّر بيانات', update_payout_info: 'غيّر رقم التحويل', verify_payout: 'أكّد رقم تحويل', backup: 'نزّل نسخة احتياطية',
-  lead_add: 'سجّل عميل جديد', lead_assign: 'وزّع طلب', lead_status: 'غيّر حالة طلب'
+  lead_add: 'سجّل عميل جديد', lead_assign: 'وزّع طلب', lead_status: 'غيّر حالة طلب',
+  payout_request: 'طلب صرف عمولة', payout_request_cancel: 'لغى طلب صرف', payout_request_reject: 'رفض طلب صرف'
 };
 const isStaff = () => ME && STAFF.includes(ME.role);
 const isAdmin = () => ME && ADMINS.includes(ME.role);
@@ -170,6 +171,7 @@ const ROUTES = {
   signup:       { page: signupPage,    who: 'guest' },
   guide:        { page: guidePage,     who: 'any',   nav: 'الدليل' },
   terms:        { page: termsPage,     who: 'any' },
+  notes:        { page: notesPage,     who: 'user' },
   home:         { page: homePage,      who: ['marketer'],  nav: 'الرئيسية' },
   sales:        { page: salesPage,     who: ['marketer'],  nav: 'بيعاتي' },
   leads:        { page: leadsPage,     who: ['marketer'],  nav: 'عملائي' },
@@ -178,6 +180,7 @@ const ROUTES = {
   news:         { page: newsPage,      who: 'user',        nav: 'الأخبار' },
   account:      { page: accountPage,   who: 'user',        nav: 'حسابي' },
   'a-dash':     { page: aDashPage,     who: ADMINS, nav: 'الملخص' },
+  'a-perf':     { page: aPerfPage,     who: SUPER,  nav: 'الأداء' },
   'a-leads':    { page: aLeadsPage,    who: STAFF,  nav: 'الطلبات' },
   'a-sale':     { page: aSalePage,     who: STAFF,  nav: 'بيعة جديدة' },
   'a-data':     { page: aDataPage,     who: STAFF,  nav: 'الاستعلام' },
@@ -204,6 +207,7 @@ const NAV_ICONS = {
   news: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
   account: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   'a-dash': '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>',
+  'a-perf': '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
   'a-leads': '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   'a-sale': '<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>',
   'a-data': '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
@@ -253,9 +257,12 @@ function renderNav(current) {
   if (!ME || needsTerms()) {
     navEl.hidden = true; tabbar.hidden = true; document.body.classList.remove('has-tabbar');
     $('#who').hidden = !ME; if (ME) $('#whoName').textContent = firstName(ME.name);
+    $('#bell').hidden = true;
     return;
   }
-  const count = k => k === 'a-leads' && ME.new_leads > 0 ? num(ME.new_leads) : '';
+  $('#bell').hidden = false; setBell(ME.unread);
+  $('#bell').classList.toggle('on', current === 'notes');
+  const count = k => k === 'a-leads' && ME.new_leads > 0 ? num(ME.new_leads) : k === 'a-pay' && ME.payout_requests > 0 ? num(ME.payout_requests) : '';
   const late = k => k === 'a-leads' && ME.late_leads > 0 ? ' late' : '';
   const badge = k => count(k) ? ` <span class="nbadge${late(k)}"${late(k) ? ` title="${num(ME.late_leads)} متأخر"` : ''}>${count(k)}</span>` : '';
   const link = k => `<a href="#${k}" class="${k === current ? 'on' : ''}">${ROUTES[k].nav}${badge(k)}</a>`;
@@ -328,6 +335,55 @@ async function route() {
 }
 window.route = route;
 function go(k) { if (location.hash === '#' + k) route(); else location.hash = k; }
+
+/* ---------------- الإشعارات ---------------- */
+function setBell(n) {
+  const dot = $('#bellDot'); n = Number(n || 0);
+  dot.hidden = !n; dot.textContent = n > 99 ? '99+' : n ? num(n) : '';
+  $('#bell').setAttribute('aria-label', n ? `الإشعارات: ${num(n)} جديد` : 'الإشعارات');
+}
+// بنشوف لو في إشعار جديد كل دقيقة (والصفحة مفتوحة قدامه بس)
+let pollBusy = false;
+async function pollUnread() {
+  if (!ME || pollBusy || document.visibilityState !== 'visible') return;
+  pollBusy = true;
+  try {
+    const n = await rpc('my_unread');
+    if (n > (ME.unread || 0) && location.hash !== '#notes') toast(n - (ME.unread || 0) > 1 ? `عندك ${num(n - (ME.unread || 0))} إشعارات جديدة 🔔` : 'عندك إشعار جديد 🔔');
+    ME.unread = n; setBell(n);
+  } catch (e) { /* النت فصل: نجرب المرة الجاية */ }
+  pollBusy = false;
+}
+setInterval(pollUnread, 60000);
+document.addEventListener('visibilitychange', pollUnread);
+
+const NOTE_ICON = { payout: '💸', payout_request: '🧾', payout_rejected: '⚠️', lead_won: '🎉', lead_unwon: '↩️', lead_link: '🔗', lead_call: '📞', lead_new: '📥', lead_assigned: '👤', lead_status: '🔄' };
+function ago(d) {
+  const m = Math.max(0, Math.floor((Date.now() - new Date(d).getTime()) / 60000));
+  if (m < 1) return 'دلوقتي';
+  if (m < 60) return `من ${num(m)} دقيقة`;
+  const h = Math.floor(m / 60); if (h < 24) return `من ${num(h)} ساعة`;
+  const days = Math.floor(h / 24); return days < 7 ? `من ${num(days)} يوم` : fdate(d);
+}
+async function notesPage() {
+  loading();
+  const r = await rpc('my_notifications', { lim: 60 });
+  const allowedLink = l => l && ROUTES[l] && allowed(ROUTES[l], ME.role) ? l : null;
+  view(`
+  <div class="card">
+    <div class="head"><h1>الإشعارات</h1>${r.unread ? `<span class="badge">${num(r.unread)} جديد</span>` : ''}</div>
+    <div class="list notes">${r.rows.length ? r.rows.map(n => {
+      const l = allowedLink(n.link), tag = l ? 'a' : 'div';
+      return `<${tag} class="item note-i${n.read_at ? '' : ' unread'}"${l ? ` href="#${l}"` : ''}>
+        <span class="note-ic" aria-hidden="true">${NOTE_ICON[n.kind] || '🔔'}</span>
+        <div class="main"><b>${esc(n.title)}</b>${n.body ? `<span class="sub">${esc(n.body)}</span>` : ''}<span class="sub">${ago(n.created_at)}</span></div>
+      </${tag}>`; }).join('')
+      : '<p class="empty">مفيش إشعارات لسه. هنقولك هنا لما عميلك يتكلم أو تتحوّلك فلوس.</p>'}</div>
+  </div>`);
+  if (r.unread) {
+    rpc('read_notifications', { p_id: null }).then(() => { ME.unread = 0; setBell(0); }).catch(() => {});
+  }
+}
 window.addEventListener('hashchange', route);
 $('#logoutBtn').addEventListener('click', async () => { await sb.auth.signOut(); ME = null; go('login'); });
 
@@ -543,6 +599,40 @@ async function refPage(code) {
 const WA_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2c-1.5 0-3-.4-4.3-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.8 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7.5-.1 1.5-.6 1.8-1.2.2-.6.2-1.1.1-1.2l-.5-.2z"/></svg>';
 
 /* ================= صفحات المسوق ================= */
+// QR كود رابط الإحالة: المكتبة بتتحمّل بس لما المسوق يطلبه
+let qrLoad = null;
+function loadQr() {
+  if (window.qrcode) return Promise.resolve();
+  return qrLoad || (qrLoad = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+    s.integrity = 'sha384-8FWZA6BGMXhsfO+BLtrJK0We6gg5o1JyO8xQm6peWDEUs17ACA5ziE/NIAkl9z2k';
+    s.crossOrigin = 'anonymous'; s.referrerPolicy = 'no-referrer';
+    s.onload = () => res(); s.onerror = () => { qrLoad = null; s.remove(); rej('مقدرناش نجهّز الـ QR. اتأكد من النت وجرّب تاني'); };
+    document.head.append(s);
+  }));
+}
+async function drawQr(canvas, url, code) {
+  await loadQr();
+  const qr = window.qrcode(0, 'M'); qr.addData(url); qr.make();
+  const n = qr.getModuleCount(), cell = Math.max(8, Math.floor(860 / n)), qs = cell * n, pad = cell * 4;
+  const W = qs + pad * 2, H = W + 170;
+  canvas.width = W; canvas.height = H;
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#0B1F4D';
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) g.fillRect(pad + c * cell, pad + r * cell, cell, cell);
+  try { if (document.fonts) await document.fonts.ready; } catch (e) { /* الخط الاحتياطي كفاية */ }
+  g.textAlign = 'center';
+  g.font = '700 60px "Readex Pro", "IBM Plex Sans Arabic", sans-serif';
+  g.fillText('Clan Agency', W / 2, qs + pad + 62);
+  g.fillStyle = '#0B3DA9'; g.direction = 'rtl';
+  g.font = '600 44px "IBM Plex Sans Arabic", sans-serif';
+  g.fillText(`صوّرني وسيب بياناتك · كود ${code}`, W / 2, qs + pad + 128);
+}
+const canRequest = me => me.status === 'active' && Number(me.balance) > 0 && Number(me.balance) >= Number(me.min_payout || 0) && !me.pending_request;
+const REQ_ST = { pending: ['mid', 'مستني التحويل'], paid: ['ok', 'اتحوّل ✓'], rejected: ['no', 'اترفض'], cancelled: ['mid', 'اتلغى'] };
+const reqPill = s => `<span class="pill ${(REQ_ST[s] || ['mid'])[0]}">${esc((REQ_ST[s] || [0, s])[1])}</span>`;
 function readyMessage(code) {
   return `تمام جدًا 👌\n🌐 تقدر تتعرف علينا أكتر من موقعنا: ${C.SITE_URL}\nسيب بياناتك من هنا وفريقنا هيكلمك: ${refLink(code)}\nأو كلّم فريقنا على الواتساب ده: ${C.CLIENTS_PHONE}\nوقولهم إنك جاي من طرف كود ${code}، وهيبعتولك عرض مناسب ليك.`;
 }
@@ -583,6 +673,8 @@ async function homePage() {
       <div class="stat"><small>إجمالي عمولتك</small><b>${money(me.earned)}</b></div>
       <div class="stat"><small>اتحوّلك</small><b>${money(me.paid)}</b></div>
     </div>
+    ${me.pending_request ? `<p class="note">🧾 طلب صرف بـ <b>${money(me.pending_request.amount)}</b> مستني من ${fdate(me.pending_request.created_at)}. هيتحوّلك على ${esc(me.pay_method || '')} وهيوصلك إشعار. <a href="#sales">التفاصيل</a></p>`
+      : canRequest(me) ? `<div class="actions"><a class="btn gold" href="#sales">💸 اطلب صرف ${money(me.balance)}</a></div>` : ''}
     <div class="level">
       <div class="head"><span>مستواك: <b>${esc(lv.name || '')}</b></span><span class="muted">${lv.next ? `فاضلك ${num(toNext)} بيعة وتوصل <b>${esc(lv.next)}</b>` : 'وصلت لأعلى مستوى 🔥'}</span></div>
       <div class="bar"><i style="width:${pct}%"></i></div>
@@ -596,6 +688,16 @@ async function homePage() {
       <button type="button" class="btn" id="cp-link">انسخ الرابط</button>
       <button type="button" class="btn gold" id="sh-link">شارك</button>
       <a class="btn ghost" href="${esc(refLink(me.code))}" target="_blank" rel="noopener">جرّبه</a>
+      <button type="button" class="btn ghost" id="qr-btn" aria-expanded="false" aria-controls="qr-box">▦ QR كود</button>
+    </div>
+    <div class="qrbox" id="qr-box" hidden>
+      <canvas id="qr-cv" role="img" aria-label="QR كود لرابط الإحالة بتاعك"></canvas>
+      <div class="stack">
+        <b>اطبعه أو نزّله ستوري</b>
+        <p class="muted">اطبعه على فلاير أو كارت، أو حطه في ستوري. أي حد يصوّره بكاميرا الموبايل يفتح رابطك على طول، ويتسجل باسمك.</p>
+        <div class="actions"><button type="button" class="btn sm" id="qr-dl">نزّل الصورة</button></div>
+        <div class="err" id="qr-err" hidden></div>
+      </div>
     </div>
   </div>
   <div class="card">
@@ -609,6 +711,24 @@ async function homePage() {
   $('#cp-code').addEventListener('click', () => copyText(me.code));
   $('#cp-ready').addEventListener('click', () => copyText(readyMessage(me.code)));
   $('#cp-link').addEventListener('click', () => copyText(refLink(me.code)));
+  setBell(me.unread);
+  let qrDrawn = false;
+  $('#qr-btn').addEventListener('click', async e => {
+    const box = $('#qr-box'), open = box.hidden;
+    box.hidden = !open; e.currentTarget.setAttribute('aria-expanded', String(open));
+    if (!open || qrDrawn) return;
+    showErr($('#qr-err'), '');
+    try { await busy(e.currentTarget, 'بنجهّز…', () => drawQr($('#qr-cv'), refLink(me.code), me.code)); qrDrawn = true; }
+    catch (m) { showErr($('#qr-err'), typeof m === 'string' ? m : 'حصلت مشكلة في الـ QR. جرّب تاني'); }
+  });
+  $('#qr-dl').addEventListener('click', () => {
+    if (!qrDrawn) return;
+    $('#qr-cv').toBlob(b => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b); a.download = `clan-qr-${me.code}.png`;
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }, 'image/png');
+  });
   $('#sh-link').addEventListener('click', async () => {
     const text = `Clan Agency بتساعد البيزنس يوصل لعملا أكتر: إدارة صفحات، إعلانات ممولة، مواقع، لوجوهات.\nسيب بياناتك من هنا وفريقنا هيكلمك:`;
     if (navigator.share) {
@@ -621,8 +741,27 @@ async function homePage() {
 
 async function salesPage() {
   loading();
-  const [sales, pays] = await Promise.all([rpc('my_sales', { lim: 300, off: 0 }), rpc('my_payouts')]);
-  const me = ME;
+  const [sales, pays, reqs, me] = await Promise.all([rpc('my_sales', { lim: 300, off: 0 }), rpc('my_payouts'), rpc('my_payout_requests'), loadMe()]);
+  const min = Number(me.min_payout || 0), pend = me.pending_request;
+  const reqBox = pend ? `
+    <div class="reqbox pending">
+      <div class="stack"><b>🧾 طلب صرف بـ ${money(pend.amount)} مستني التحويل</b>
+        <span class="muted">اتبعت ${fdatetime(pend.created_at)}. هيتحوّلك على ${esc(me.pay_method || '')} <span class="ltr">${esc(me.pay_number || '')}</span>، وهيوصلك إشعار أول ما يتحوّل.</span></div>
+      <button type="button" class="btn ghost sm" id="rq-cancel">الغي الطلب</button>
+    </div>`
+    : me.status !== 'active' ? ''
+    : Number(me.balance) <= 0 ? `<p class="muted">لما يبقى ليك رصيد، تقدر تطلب صرفه من هنا.</p>`
+    : Number(me.balance) < min ? `<p class="note">رصيدك ${money(me.balance)}. تقدر تطلب صرف لما يوصل <b>${money(min)}</b>.</p>`
+    : `<form class="reqbox" id="rq" novalidate>
+        <div class="stack"><b>💸 اطلب صرف عمولتك</b>
+          <span class="muted">هيتحوّلك على <b>${esc(me.pay_method || '')}</b> رقم <b class="ltr">${esc(me.pay_number || '')}</b>. <a href="#account">غيّر رقم التحويل</a></span></div>
+        <div class="rq-row">
+          <label class="f">المبلغ (جنيه)<input id="rq-amt" inputmode="decimal" dir="ltr" value="${esc(me.balance)}"></label>
+          <button class="btn gold" id="rq-btn">اطلب الصرف</button>
+        </div>
+        ${min > 0 ? `<small class="muted">أقل مبلغ ${money(min)}، وأكتر مبلغ رصيدك كله.</small>` : ''}
+        <div class="err" id="rq-err" hidden></div>
+      </form>`;
   view(`
   <div class="card">
     <h1>بيعاتي</h1>
@@ -631,7 +770,9 @@ async function salesPage() {
       <div class="stat"><small>كل البيعات</small><b>${num(me.total_sales)}</b></div>
       <div class="stat"><small>اتحوّلك</small><b>${money(me.paid)}</b></div>
     </div>
-    ${me.balance > 0 ? `<p class="note">الباقي هيتحوّلك على <b>${esc(me.pay_method)}</b> رقم <b class="ltr">${esc(me.pay_number)}</b>. <a href="#account">غيّر رقم التحويل</a></p>` : ''}
+    ${reqBox}
+    ${reqs.length ? `<details class="reqhist"><summary>طلبات الصرف اللي فاتت (${num(reqs.length)})</summary><div class="list">${reqs.map(r => `
+      <div class="item"><div class="main"><b>${money(r.amount)}</b><span class="sub">${fdate(r.created_at)} · ${esc(r.method || '')}${r.reason ? ` · السبب: ${esc(r.reason)}` : ''}</span></div><div class="end">${reqPill(r.status)}</div></div>`).join('')}</div></details>` : ''}
     <div class="list">${sales.length ? sales.map(s => `
       <div class="item"><div class="main"><b>${esc(s.service)}</b><span class="sub">${fdate(s.created_at)} · ${esc(s.client_name)}${s.country && s.country !== 'مصر' ? ' · ' + esc(s.country) : ''}</span></div>
       <div class="end">${s.status === 'cancelled' ? pill('cancelled') : `<span class="amt">+${money(s.amount)}</span>`}</div></div>`).join('')
@@ -642,6 +783,19 @@ async function salesPage() {
       <div class="item"><div class="main"><b>${esc(p.method || '')}</b><span class="sub">${fdate(p.created_at)}</span></div><div class="end"><span class="amt">${money(p.amount)}</span></div></div>`).join('')
       : `<p class="empty">لسه مفيش تحويلات.</p>`}</div>
   </div>`);
+  if ($('#rq')) $('#rq').addEventListener('submit', async e => {
+    e.preventDefault(); showErr($('#rq-err'), '');
+    const amount = Number(digits($('#rq-amt').value).replace(/[^\d.]/g, ''));
+    if (!(amount > 0)) return showErr($('#rq-err'), 'اكتب المبلغ');
+    if (amount > Number(me.balance)) return showErr($('#rq-err'), `المبلغ أكبر من رصيدك (${money(me.balance)})`);
+    if (amount < min) return showErr($('#rq-err'), `أقل مبلغ تقدر تطلبه ${money(min)}`);
+    try { await busy($('#rq-btn'), 'بنبعت…', () => rpc('request_payout', { p_amount: amount })); toast('طلب الصرف اتبعت ✓ هيوصلك إشعار لما يتحوّل'); route(); }
+    catch (m) { showErr($('#rq-err'), m); }
+  });
+  if ($('#rq-cancel')) $('#rq-cancel').addEventListener('click', async e => {
+    if (!twoStep(e.currentTarget, 'متأكد؟ دوس تاني')) return;
+    try { await rpc('cancel_payout_request'); toast('الطلب اتلغى'); route(); } catch (m) { toast(m); }
+  });
 }
 
 async function libraryPage() {
@@ -963,16 +1117,96 @@ async function aDashPage() {
   $('#d-exp').addEventListener('click', e => busy(e.target, 'بنجهّز…', exportCsv).catch(m => toast(m)));
 }
 
+/* ---------------- لوحة الأداء (السوبر بس) ---------------- */
+let PERF_DAYS = 30;
+const PERF_SRC = { link: ['🔗', 'رابط المسوق'], call: ['📞', 'الكول سنتر'], marketer: ['👤', 'المسوق بنفسه'] };
+const pct = (a, b) => b ? Math.round(a * 1000 / b) / 10 : 0;
+const pctTxt = (a, b) => b ? `${pct(a, b)}%` : '—';
+function dur(m) {
+  if (m === null || m === undefined) return '—';
+  m = Number(m);
+  if (m < 1) return 'ثواني';
+  if (m < 60) return `${num(Math.round(m))} دقيقة`;
+  if (m < 48 * 60) return `${(Math.round(m / 6) / 10).toLocaleString('en-US')} ساعة`;
+  return `${(Math.round(m / 144) / 10).toLocaleString('en-US')} يوم`;
+}
+const rateBar = (a, b) => `<span class="pbar" aria-hidden="true"><i style="width:${Math.min(100, pct(a, b))}%"></i></span>`;
+
+async function aPerfPage() {
+  loading();
+  const d = await rpc('super_performance', { p_days: PERF_DAYS || null });
+  const t = d.total;
+  const srcs = Object.keys(PERF_SRC).map(k => d.sources.find(s => s.source === k) || { source: k, leads: 0, won: 0, lost: 0, avg_min: null });
+  // الأكتر: لو فيه تعادل منقولش إن واحد كسبان
+  const top = (list, val) => { const m = Math.max(...list.map(val)); const w = list.filter(s => val(s) === m); return w.length === 1 && m > 0 ? w[0] : null; };
+  const most = top(srcs, s => Number(s.leads));
+  const best = top(srcs.filter(s => s.leads >= 3), s => pct(s.won, s.leads));
+  const small = n => n < 5 ? ' <span class="pill gold" title="أقل من 5 طلبات، النسبة لسه مش دقيقة">عينة صغيرة</span>' : '';
+  const per = { 7: 'آخر 7 أيام', 30: 'آخر 30 يوم', 90: 'آخر 3 شهور', 0: 'من الأول' };
+  view(`
+  <div class="card perf">
+    <div class="head"><h1>لوحة الأداء</h1>
+      <div class="seg sm" id="pf-per">${Object.keys(per).sort((a, b) => (a === '0') - (b === '0') || a - b).map(k =>
+        `<button type="button" data-d="${k}" class="${String(PERF_DAYS) === k ? 'on' : ''}">${per[k]}</button>`).join('')}</div></div>
+    <p class="lead">الأرقام دي من طلبات العملا اللي اتسجلت ${PERF_DAYS ? `في ${per[PERF_DAYS]}` : 'من أول يوم'}. «أول مكالمة» = أول مرة حد من الفريق غيّر حالة الطلب من «جديد».</p>
+    <div class="stats">
+      <div class="stat"><small>طلبات العملا</small><b>${num(t.leads)}</b></div>
+      <div class="stat hl"><small>اتقفلت ديل</small><b>${num(t.won)} <span class="sub">(${pctTxt(t.won, t.leads)})</span></b></div>
+      <div class="stat"><small>متوسط الوقت لأول مكالمة</small><b>${dur(t.avg_min)}</b></div>
+      <div class="stat"><small>نص الطلبات اتكلّمت خلال</small><b>${dur(t.median_min)}</b></div>
+      <div class="stat"><small>اتكلّمت في أول ساعة</small><b>${pctTxt(t.within_hour, t.contacted)}</b></div>
+      <a class="stat${t.waiting ? ' warn' : ''}" href="#a-leads" style="text-decoration:none;color:inherit"><small>مستنية أول مكالمة</small><b>${num(t.waiting)}</b>${t.oldest_waiting ? `<span class="sub">أقدمها من ${dur((Date.now() - new Date(t.oldest_waiting)) / 60000)}</span>` : ''}</a>
+    </div>
+  </div>
+
+  <div class="card perf"><h2>العملا بييجوا منين؟</h2>
+    ${most || best ? `<p class="note">${most ? `أكتر مصدر بيجيب عملا: <b>${PERF_SRC[most.source][1]}</b> (${pctTxt(most.leads, t.leads)} من الطلبات).` : ''}
+      ${best ? `أعلى نسبة قفل: <b>${PERF_SRC[best.source][1]}</b> (${pctTxt(best.won, best.leads)} من طلباته اتقفلت).` : ''}</p>` : ''}
+    <div class="srcs">${srcs.map(s => `
+      <div class="src">
+        <div class="src-h"><span class="src-ic">${PERF_SRC[s.source][0]}</span><b>${PERF_SRC[s.source][1]}</b><span class="src-n">${num(s.leads)} طلب</span></div>
+        <div class="share" title="${pctTxt(s.leads, t.leads)} من كل الطلبات"><i style="width:${pct(s.leads, t.leads)}%"></i></div>
+        <dl>
+          <div><dt>من كل الطلبات</dt><dd>${pctTxt(s.leads, t.leads)}</dd></div>
+          <div><dt>اتقفلت</dt><dd>${num(s.won)} · ${pctTxt(s.won, s.leads)}</dd></div>
+          <div><dt>أول مكالمة</dt><dd>${dur(s.avg_min)}</dd></div>
+        </dl>
+      </div>`).join('')}</div>
+  </div>
+
+  <div class="card perf"><h2>الموظفين</h2>
+    <p class="lead">كل طلب محسوب على الموظف اللي متوزّع عليه. النسبة = الديلز اللي اتقفلت من كل الطلبات اللي معاه.</p>
+    ${d.staff.length ? `<div class="tablewrap"><table class="ptbl">
+      <thead><tr><th>الموظف</th><th>طلبات</th><th>نسبة القفل</th><th>أول مكالمة</th></tr></thead>
+      <tbody>${d.staff.map(s => `<tr>
+        <td><b>${s.code ? esc(s.name) : 'مش متوزّعة'}</b>${s.code ? small(s.leads) : ''}<div class="sub">${s.code ? `${esc(ROLES[s.role] || s.role)}${s.status === 'blocked' ? ' · موقوف' : ''} · ` : ''}${num(s.won)} اتقفلت · ${num(s.lost)} مش مهتم${s.waiting ? ` · <span class="bad-t">${num(s.waiting)} مستني</span>` : ''}</div></td>
+        <td>${num(s.leads)}</td>
+        <td><b>${pctTxt(s.won, s.leads)}</b>${rateBar(s.won, s.leads)}</td>
+        <td>${dur(s.avg_min)}${s.contacted > 1 ? `<div class="sub">النص خلال ${dur(s.median_min)}</div>` : ''}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<p class="empty">مفيش طلبات في الفترة دي.</p>'}
+  </div>
+
+  <div class="card perf"><h2>المسوقين</h2>
+    <p class="lead">مترتبين بعدد الديلز اللي اتقفلت من عملاهم.</p>
+    ${d.marketers.length ? `<div class="tablewrap"><table class="ptbl">
+      <thead><tr><th>المسوق</th><th>طلبات</th><th>اتقفلت</th><th>نسبة القفل</th></tr></thead>
+      <tbody>${d.marketers.map(m => `<tr>
+        <td><b>${esc(m.name)}</b> <span class="sub ltr">${esc(m.code)}</span>${small(m.leads)}<div class="sub">${m.by_link ? `🔗 ${num(m.by_link)} · ` : ''}${m.by_call ? `📞 ${num(m.by_call)} · ` : ''}${num(m.open)} مفتوح · ${num(m.lost)} مش مهتم${m.status === 'blocked' ? ' · موقوف' : ''}</div></td>
+        <td>${num(m.leads)}</td><td>${num(m.won)}</td>
+        <td><b>${pctTxt(m.won, m.leads)}</b>${rateBar(m.won, m.leads)}</td></tr>`).join('')}</tbody>
+    </table></div>` : '<p class="empty">مفيش طلبات في الفترة دي.</p>'}
+  </div>`);
+  $('#pf-per').addEventListener('click', e => {
+    const b = e.target.closest('[data-d]'); if (!b) return;
+    PERF_DAYS = Number(b.dataset.d); route();
+  });
+}
+
 async function exportCsv() {
   const rows = await rpc('admin_export');
   const head = ['الكود','الاسم','الموبايل','السن','المحافظة','الخبرة','طريقة التحويل','رقم التحويل','الصلاحية','الحالة','تاريخ التسجيل','عدد البيعات','إجمالي العمولة','اتحوّل','الباقي'];
-  const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [head.join(',')].concat(rows.map(r => [r.code, r.name, '\t' + r.phone, r.age, r.gov, r.exp, r.pay_method, '\t' + (r.pay_number || ''),
-    ROLES[r.role] || r.role, r.status === 'blocked' ? 'موقوف' : 'نشط', fdate(r.created_at), r.sales_count, r.earned, r.paid, r.balance].map(cell).join(',')));
-  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `clan-marketers-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  xlsxDownload('clan-marketers', head, rows.map(r => [r.code, r.name, '\t' + r.phone, r.age, r.gov, r.exp, r.pay_method, r.pay_number ? '\t' + r.pay_number : '',
+    ROLES[r.role] || r.role, r.status === 'blocked' ? 'موقوف' : 'نشط', fdate(r.created_at), r.sales_count, r.earned, r.paid, r.balance]), 'المسوقين');
 }
 
 function aSalePage() {
@@ -1020,6 +1254,11 @@ function aSalePage() {
 
 function aPayPage() {
   view(`
+  <div class="card" id="pr">
+    <div class="head"><h1>طلبات الصرف</h1><div class="seg sm" id="pr-tab"><button type="button" data-s="pending" class="on">مستنية</button><button type="button" data-s="">الكل</button></div></div>
+    <p class="lead">المسوق بيطلب صرف رصيده من صفحة «بيعاتي». حوّله على الرقم اللي قدامك، وبعدين دوس «حوّلت». المسوق بيوصله إشعار على طول.</p>
+    <div class="list" id="pr-list"><p class="empty">جاري التحميل…</p></div>
+  </div>
   <form class="card" id="pf" novalidate>
     <div class="stack"><h1>تسجيل تحويل</h1><p class="lead">حوّل للمسوق الأول على إنستاباي أو فودافون كاش، وبعدين سجّل المبلغ هنا.</p></div>
     <label class="f">كود المسوق<input id="p-code" dir="ltr" placeholder="M001" autocomplete="off"></label>
@@ -1061,8 +1300,65 @@ function aPayPage() {
       if (!verified) { verified = true; $('#p-verify-box').hidden = true; }
       $('#p-ok').innerHTML = `<div class="okbox">✓ اتسجل التحويل لـ ${esc(r.name)}. الباقي ليه دلوقتي ${money(r.balance)}.</div>`;
       $('#p-amount').value = ''; $('#p-notes').value = ''; toast('التحويل اتسجل ✓');
+      loadReqs();
     } catch (m) { showErr($('#p-err'), m); }
   });
+
+  // طلبات الصرف
+  let prSt = 'pending', reqs = {};
+  const reqItem = r => `
+    <div class="item preq" data-id="${r.id}">
+      <div class="main"><b>${esc(r.name)} <span class="ltr sub">${esc(r.code)}</span> · ${money(r.amount)}</b>
+        <span class="sub">${esc(r.pay_method || r.method || '')}: <b class="ltr">${esc(r.pay_number || r.number || '')}</b> ${r.payout_verified ? '<span class="pill ok">متأكدين منه ✓</span>' : '<span class="pill no">رقم مش متأكد</span>'}
+          ${r.pay_number && r.number && r.pay_number !== r.number ? ' · <b style="color:var(--bad)">غيّر الرقم بعد الطلب</b>' : ''}</span>
+        <span class="sub">طلبه ${fdatetime(r.created_at)} · رصيده دلوقتي ${money(r.balance)}${r.decided_by_name ? ` · ${esc(firstName(r.decided_by_name))} ${fdate(r.decided_at)}` : ''}${r.reason ? ` · السبب: ${esc(r.reason)}` : ''}</span>
+        ${r.status === 'pending' ? `<div class="preq-act">
+          ${r.payout_verified ? '' : `<label class="agree"><input type="checkbox" data-ver> اتصلت بالمسوق على <span class="ltr">${esc(r.phone || '')}</span> واتأكدت إن رقم التحويل بتاعه</label>`}
+          <div class="actions">
+            <button type="button" class="btn gold sm" data-paid="${r.id}">حوّلت ✓ سجّل التحويل</button>
+            <button type="button" class="btn ghost sm" data-rej="${r.id}">ارفض</button>
+          </div>
+          <div class="rej" hidden><label class="f">سبب الرفض <span class="opt">(المسوق هيشوفه)</span><input data-reason placeholder="مثلًا: الرقم مش بيرد"></label>
+            <button type="button" class="btn sm" data-rej-go="${r.id}">ابعت الرفض</button></div>
+          <div class="err" hidden></div>
+        </div>` : ''}
+      </div>
+      <div class="end">${reqPill(r.status)}</div>
+    </div>`;
+  async function loadReqs() {
+    const box = $('#pr-list'); if (!box) return;
+    try {
+      const rows = await rpc('admin_payout_requests', { p_status: prSt || null });
+      rows.forEach(r => { reqs[r.id] = r; });
+      box.innerHTML = rows.length ? rows.map(reqItem).join('') : `<p class="empty">${prSt ? 'مفيش طلبات صرف مستنية ✓' : 'لسه مفيش طلبات صرف.'}</p>`;
+      if (prSt === 'pending' && ME) { ME.payout_requests = rows.length; renderNav('a-pay'); }
+    } catch (m) { box.innerHTML = `<p class="err">${esc(m)}</p>`; }
+  }
+  $('#pr-tab').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; prSt = b.dataset.s; $$('#pr-tab button').forEach(x => x.classList.toggle('on', x === b)); loadReqs(); });
+  $('#pr-list').addEventListener('click', async e => {
+    const it = e.target.closest('.preq'); if (!it) return;
+    const er = $('.err', it), say = m => showErr(er, m);
+    const paid = e.target.closest("[data-paid]"), rej = e.target.closest("[data-rej]"), rg = e.target.closest("[data-rej-go]");
+    if (rej) { $('.rej', it).hidden = !$('.rej', it).hidden; if (!$('.rej', it).hidden) $('[data-reason]', it).focus(); return; }
+    if (paid) {
+      say('');
+      const ver = $('[data-ver]', it);
+      if (ver && !ver.checked) return say('اتأكد من رقم التحويل الأول مع المسوق وعلّم على المربع');
+      if (!twoStep(paid, 'متأكد إنك حوّلت؟ دوس تاني')) return;
+      try {
+        const r = await busy(paid, 'بنسجّل…', () => rpc('admin_decide_payout_request', { p_id: Number(it.dataset.id), p_action: 'paid', p_verified: !!(ver && ver.checked) }));
+        toast(`اتسجل التحويل لـ ${firstName(r.name)} ✓ ووصله إشعار`); loadReqs();
+      } catch (m) { say(m); }
+    }
+    if (rg) {
+      say('');
+      const reason = $('[data-reason]', it).value.trim();
+      if (reason.length < 3) return say('اكتب سبب الرفض');
+      try { await busy(rg, "بنبعت…", () => rpc("admin_decide_payout_request", { p_id: Number(it.dataset.id), p_action: "rejected", p_reason: reason })); toast('الطلب اترفض، والمسوق وصله السبب'); loadReqs(); }
+      catch (m) { say(m); }
+    }
+  });
+  loadReqs();
 }
 
 function aMkPage() {
@@ -1179,12 +1475,57 @@ function dateRange(preset) {
   if (preset === 'last') { const first = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1)); const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 0)); return [iso(first), iso(end)]; }
   return ['', ''];
 }
-function csvDownload(name, head, rows) {
-  const cell = v => { const s = String(v == null ? '' : v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [head.map(cell).join(',')].concat(rows.map(r => r.map(cell).join(',')));
-  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+/* ملف Excel حقيقي (.xlsx): الشيت من اليمين للشمال، والعناوين تقيلة ومتثبتة فوق، وفلتر على كل عمود.
+   القيمة اللي أولها \t بتتكتب نص زي ما هي (عشان الأصفار في أول الموبايل ما تضيعش). */
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files) {
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  const d = new Date(), dt = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate(), tm = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  for (const [name, text] of files) {
+    const nb = enc.encode(name), data = enc.encode(text), crc = crc32(data);
+    const h = new DataView(new ArrayBuffer(30));
+    [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x0800, 2], [8, 0, 2], [10, tm, 2], [12, dt, 2], [14, crc, 4], [18, data.length, 4], [22, data.length, 4], [26, nb.length, 2], [28, 0, 2]]
+      .forEach(([o, v, s]) => s === 4 ? h.setUint32(o, v, true) : h.setUint16(o, v, true));
+    const c = new DataView(new ArrayBuffer(46));
+    [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x0800, 2], [10, 0, 2], [12, tm, 2], [14, dt, 2], [16, crc, 4], [20, data.length, 4], [24, data.length, 4], [28, nb.length, 2], [30, 0, 2], [32, 0, 2], [34, 0, 2], [36, 0, 2], [38, 0, 4], [42, off, 4]]
+      .forEach(([o, v, s]) => s === 4 ? c.setUint32(o, v, true) : c.setUint16(o, v, true));
+    parts.push(h, nb, data); central.push(c, nb); off += 30 + nb.length + data.length;
+  }
+  const size = central.reduce((a, x) => a + x.byteLength, 0), e = new DataView(new ArrayBuffer(22));
+  [[0, 0x06054b50, 4], [4, 0, 2], [6, 0, 2], [8, files.length, 2], [10, files.length, 2], [12, size, 4], [16, off, 4], [20, 0, 2]]
+    .forEach(([o, v, s]) => s === 4 ? e.setUint32(o, v, true) : e.setUint16(o, v, true));
+  return new Blob(parts.concat(central, [e]), { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}
+function xlsxBlob(sheet, head, rows) {
+  const x = s => String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const col = i => { let s = ''; for (i++; i; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
+  const widths = head.map(h => String(h).length);
+  const cell = (v, r, c, style) => {
+    const ref = col(c) + r;
+    if (v == null || v === '') return '';
+    let s = typeof v === 'string' ? v : String(v);
+    const text = typeof v === 'string' && s.startsWith('\t');
+    if (text) s = s.slice(1);
+    widths[c] = Math.max(widths[c], Math.min(60, s.length));
+    if (!text && !style && (typeof v === 'number' || /^-?(0|[1-9]\d{0,14})(\.\d+)?$/.test(s))) return `<c r="${ref}"><v>${Number(s)}</v></c>`;
+    return `<c r="${ref}" t="inlineStr"${style ? ` s="${style}"` : ''}><is><t xml:space="preserve">${x(s)}</t></is></c>`;
+  };
+  const body = [head].concat(rows).map((r, i) => `<row r="${i + 1}">${r.map((v, c) => cell(v, i + 1, c, i === 0 ? 1 : 0)).join('')}</row>`).join('');
+  const last = col(head.length - 1) + (rows.length + 1);
+  const ws = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView rightToLeft="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${Math.max(8, w + 3)}" customWidth="1"/>`).join('')}</cols><sheetData>${body}</sheetData><autoFilter ref="A1:${last}"/></worksheet>`;
+  return zipStore([
+    ['[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'],
+    ['_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'],
+    ['xl/workbook.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets><sheet name="${x(String(sheet).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31))}" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${x(String(sheet).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31)).replace(/'/g, "''")}'!$A$1:$${col(head.length - 1)}$${rows.length + 1}</definedName></definedNames></workbook>`],
+    ['xl/worksheets/sheet1.xml', ws],
+    ['xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'],
+    ['xl/styles.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0B3DA9"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>']
+  ]);
+}
+function xlsxDownload(name, head, rows, sheet) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `${name}-${cairoToday()}.csv`;
+  a.href = URL.createObjectURL(xlsxBlob(sheet || name, head, rows)); a.download = `${name}-${cairoToday()}.xlsx`;
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 async function fetchAll(fn, args) {
@@ -1286,11 +1627,11 @@ function aDataPage() {
   $('#d-exp').addEventListener('click', e => busy(e.target, 'بنجهّز…', async () => {
     const a = collect(), rows = await fetchAll(FN[tab], a);
     if (!rows.length) throw 'مفيش نتايج تتصدّر';
-    if (tab === 'sales') csvDownload('clan-sales', ['رقم','التاريخ','كود المسوق','المسوق','العميل','موبايل العميل','البلد','الخدمة','العمولة','الحالة','سجّلها','ملاحظات'],
+    if (tab === 'sales') xlsxDownload('clan-sales', ['رقم','التاريخ','كود المسوق','المسوق','العميل','موبايل العميل','البلد','الخدمة','العمولة','الحالة','سجّلها','ملاحظات'],
       rows.map(s => [s.id, fdate(s.created_at), s.code, s.marketer_name, s.client_name, s.client_phone ? '\t' + s.client_phone : '', s.country, s.service, s.amount, s.status === 'cancelled' ? 'ملغية' : 'مؤكدة', s.created_by_name, s.notes]));
-    else if (tab === 'payouts') csvDownload('clan-payouts', ['رقم','التاريخ','كود المسوق','المسوق','المبلغ','الطريقة','سجّله','ملاحظات'],
+    else if (tab === 'payouts') xlsxDownload('clan-payouts', ['رقم','التاريخ','كود المسوق','المسوق','المبلغ','الطريقة','سجّله','ملاحظات'],
       rows.map(p => [p.id, fdate(p.created_at), p.code, p.marketer_name, p.amount, p.method, p.created_by_name, p.notes]));
-    else csvDownload('clan-marketers', ['الكود','الاسم','الموبايل','المحافظة','الخبرة','الصلاحية','الحالة','طريقة التحويل','رقم التحويل','تاريخ التسجيل','بيعات الشهر','كل البيعات','إجمالي العمولة','اتحوّل','الباقي'],
+    else xlsxDownload('clan-marketers', ['الكود','الاسم','الموبايل','المحافظة','الخبرة','الصلاحية','الحالة','طريقة التحويل','رقم التحويل','تاريخ التسجيل','بيعات الشهر','كل البيعات','إجمالي العمولة','اتحوّل','الباقي'],
       rows.map(m => [m.code, m.name, '\t' + m.phone, m.gov, m.exp, ROLES[m.role] || m.role, m.status === 'blocked' ? 'موقوف' : 'نشط', m.pay_method, m.pay_number ? '\t' + m.pay_number : '', fdate(m.created_at), m.month_sales, m.sales_count, m.earned, m.paid, m.balance]));
   }).catch(m => toast(m)));
   drawForm();
@@ -1521,6 +1862,11 @@ async function aSettingsPage() {
     <label class="f">العمولة على كل بيعة (جنيه) <span class="opt">(بتسري على البيعات الجديدة بس)</span><input id="st-com" inputmode="decimal" dir="ltr" value="${esc(s.commission)}"></label>
     <button class="btn" id="st-com-btn">احفظ العمولة</button>
   </form>
+  <form class="card" id="st-m" novalidate>
+    <h2>طلبات الصرف</h2>
+    <label class="f">أقل مبلغ يقدر المسوق يطلب صرفه (جنيه) <span class="opt">(0 = أي مبلغ)</span><input id="st-min" inputmode="decimal" dir="ltr" value="${esc(s.min_payout == null ? 100 : s.min_payout)}"></label>
+    <button class="btn" id="st-min-btn">احفظ</button>
+  </form>
   <form class="card" id="st-l" novalidate>
     <h2>المستويات</h2>
     <p class="lead">المستوى بيتحسب من عدد بيعات المسوق كلها. أول مستوى لازم يبدأ من 0.</p>
@@ -1546,6 +1892,13 @@ async function aSettingsPage() {
     const v = Number(digits($('#st-com').value));
     if (!(v > 0)) return toast('اكتب رقم صح');
     try { await busy($('#st-com-btn'), 'بنحفظ…', () => rpc('super_set_setting', { p_key: 'commission', p_value: v })); toast('اتحفظ ✓'); ME = null; }
+    catch (m) { toast(m); }
+  });
+  $('#st-m').addEventListener('submit', async e => {
+    e.preventDefault();
+    const raw = digits($('#st-min').value).trim(), v = Number(raw);
+    if (raw === '' || !(v >= 0)) return toast('اكتب رقم صح');
+    try { await busy($('#st-min-btn'), 'بنحفظ…', () => rpc('super_set_setting', { p_key: 'min_payout', p_value: v })); toast('اتحفظ ✓'); }
     catch (m) { toast(m); }
   });
   $('#st-l').addEventListener('submit', async e => {
@@ -1667,6 +2020,7 @@ async function aLeadsPage() {
     </form>
   </div>
   <div class="card">
+    <div class="head"><h2>النتايج</h2><button type="button" class="btn ghost sm" id="l-exp">⬇ تصدير Excel</button></div>
     <div class="stats" id="l-sum"></div>
     <div class="err" id="l-err" hidden></div>
     <div class="tablewrap"><table class="tbl" id="l-tbl">
@@ -1753,6 +2107,17 @@ async function aLeadsPage() {
   $('#lq-code').addEventListener('change', () => run(false));
   if ($('#lq-as')) $('#lq-as').addEventListener('change', () => run(false));
   $('#l-more').addEventListener('click', () => { off += 50; run(true); });
+  // التصدير بنفس الفلاتر والتبويب اللي فاتحهم
+  $('#l-exp').addEventListener('click', e => busy(e.currentTarget, 'بنجهّز…', async () => {
+    const rows = await fetchAll('staff_leads_query', args);
+    if (!rows.length) throw 'مفيش طلبات تتصدّر';
+    const tabName = (TABS.find(t => t[0] === st) || [0, 'الطلبات'])[1].replace(/[^\p{L}\p{N} ]/gu, '').trim() || 'الطلبات';
+    xlsxDownload('clan-leads', ['رقم الطلب','اتسجل','العميل','البيزنس','الموبايل','البلد','الخدمات','المصدر','كود المسوق','المسوق','الكول سنتر','الحالة','متأخر','العمولة','ملاحظة المسوق','ملاحظات الفريق','سجّله','آخر تحديث','اتقفل'],
+      rows.map(r => [r.id, fdatetime(r.created_at), r.client_name, r.business, '\t' + r.client_phone, r.country, (r.services || []).join('، '),
+        (SRC_STAFF[r.source] || SRC_STAFF.marketer).replace(/^\S+\s/, ''), r.code, r.marketer_name, r.assigned_name || 'مش متوزع', LEAD_ST[r.status] || r.status,
+        r.overdue ? lateAge(r.age_hours) : '', r.commission || '', r.notes, r.staff_notes, r.created_by_name, fdate(r.updated_at), fdate(r.closed_at)]), tabName);
+    toast(`اتصدّر ${num(rows.length)} طلب ✓`);
+  }).catch(m => toast(m)));
 
   // الكول سنتر: نتأكد من الكود ونعرض اسم المسوق قبل التسجيل
   let peekSeq = 0;
