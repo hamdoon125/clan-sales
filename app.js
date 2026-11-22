@@ -149,7 +149,32 @@ function addPasswordEyes(root) {
   });
 }
 new MutationObserver(() => addPasswordEyes(document)).observe(document.body, { childList: true, subtree: true });
-function loading() { view('<div class="card"><p class="empty">جاري التحميل…</p></div>'); }
+// مكان المحتوى وهو بيحمّل: خطوط رمادية بتلمع بنفس شكل الكروت
+const skelRows = (n = 4) => `<div class="skel-list" aria-hidden="true">${Array.from({ length: n }, () =>
+  '<div class="skel-row"><div class="skel-col"><i class="sk" style="width:55%"></i><i class="sk sm" style="width:35%"></i></div><i class="sk pill-sk"></i></div>').join('')}</div>`;
+const SKEL = `<div class="sr-only" role="status">جاري التحميل…</div>${skelRows(4)}`;
+function loading() {
+  view(`<div class="card skel" aria-busy="true"><div class="sr-only" role="status">جاري التحميل…</div>
+    <i class="sk h" style="width:40%"></i><i class="sk sm" style="width:70%"></i>
+    <div class="stats">${'<div class="stat"><i class="sk sm" style="width:60%"></i><i class="sk" style="width:40%;height:20px"></i></div>'.repeat(4)}</div></div>
+  <div class="card skel" aria-hidden="true"><i class="sk h" style="width:30%"></i>${skelRows(4)}</div>`);
+}
+// صفحة فاضية: أيقونة + جملة بتقول تعمل إيه بعدها
+const EMPTY_IC = {
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  coins: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.7 0-3 .8-3 2s1.3 1.7 3 2 3 .8 3 2-1.3 2-3 2c-1.4 0-2.5-.5-3-1.5M12 6v2m0 8v2"/>',
+  check: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/>',
+  trophy: '<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 5h3v2a3 3 0 0 1-3 3M7 5H4v2a3 3 0 0 0 3 3"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/>',
+  news: '<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16 9a3 3 0 0 1 0 6M19 6a7 7 0 0 1 0 12"/>',
+  users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/>'
+};
+function emptyState(ic, title, text, action) {
+  return `<div class="empty-st${ic === 'check' ? ' good' : ''}"><span class="es-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${EMPTY_IC[ic] || EMPTY_IC.inbox}</svg></span>
+    <b>${title}</b>${text ? `<p>${text}</p>` : ''}${action || ''}</div>`;
+}
 function failed(m) {
   view(`<div class="card"><p class="err">${esc(m)}</p><button class="btn ghost sm" id="retry">جرّب تاني</button></div>`);
   $('#retry').addEventListener('click', () => route());
@@ -378,7 +403,7 @@ async function notesPage() {
         <span class="note-ic" aria-hidden="true">${NOTE_ICON[n.kind] || '🔔'}</span>
         <div class="main"><b>${esc(n.title)}</b>${n.body ? `<span class="sub">${esc(n.body)}</span>` : ''}<span class="sub">${ago(n.created_at)}</span></div>
       </${tag}>`; }).join('')
-      : '<p class="empty">مفيش إشعارات لسه. هنقولك هنا لما عميلك يتكلم أو تتحوّلك فلوس.</p>'}</div>
+      : emptyState('bell', 'مفيش إشعارات لسه', 'هنقولك هنا لما عميل يسجّل من رابطك، أو حالته تتغير، أو تتحوّلك فلوس.')}</div>
   </div>`);
   if (r.unread) {
     rpc('read_notifications', { p_id: null }).then(() => { ME.unread = 0; setBell(0); }).catch(() => {});
@@ -776,12 +801,12 @@ async function salesPage() {
     <div class="list">${sales.length ? sales.map(s => `
       <div class="item"><div class="main"><b>${esc(s.service)}</b><span class="sub">${fdate(s.created_at)} · ${esc(s.client_name)}${s.country && s.country !== 'مصر' ? ' · ' + esc(s.country) : ''}</span></div>
       <div class="end">${s.status === 'cancelled' ? pill('cancelled') : `<span class="amt">+${money(s.amount)}</span>`}</div></div>`).join('')
-      : `<p class="empty">لسه مفيش بيعات. أول عميل يدفع بكودك هيظهر هنا.</p>`}</div>
+      : emptyState('coins', 'لسه مفيش بيعات', 'أول عميل يدفع بكودك هيظهر هنا، وعمولته تتحسبلك لوحدها.', '<a class="btn sm gold" href="#home">شير رابطك</a>')}</div>
   </div>
   <div class="card"><h2>التحويلات اللي وصلتني</h2>
     <div class="list">${pays.length ? pays.map(p => `
       <div class="item"><div class="main"><b>${esc(p.method || '')}</b><span class="sub">${fdate(p.created_at)}</span></div><div class="end"><span class="amt">${money(p.amount)}</span></div></div>`).join('')
-      : `<p class="empty">لسه مفيش تحويلات.</p>`}</div>
+      : emptyState('coins', 'لسه مفيش تحويلات', 'لما يبقى عندك رصيد، اطلب صرفه من هنا وهيتحوّلك على رقمك.')}</div>
   </div>`);
   if ($('#rq')) $('#rq').addEventListener('submit', async e => {
     e.preventDefault(); showErr($('#rq-err'), '');
@@ -823,7 +848,7 @@ async function libraryPage() {
           ${i.body ? `<button class="btn sm" data-copy="${i.id}">انسخ</button>` : ''}
           ${i.image_url ? `<a class="btn sm ghost" href="${esc(i.image_url)}" target="_blank" rel="noopener">افتح الصورة واحفظها</a>` : ''}
         </div>
-      </div>`).join('') : '<p class="empty">مفيش محتوى هنا لسه.</p>';
+      </div>`).join('') : emptyState('book', 'مفيش محتوى هنا لسه', 'الفريق بيضيف سكريبتات وردود جاهزة باستمرار. ارجع شوف بعدين.');
   }
   draw();
   $('#kinds').addEventListener('click', e => {
@@ -841,17 +866,17 @@ async function leadersPage() {
   <div class="card">
     <div class="stack"><h1>الترتيب 🏆</h1><p class="lead">أكتر المسوقين بيعات. اتنافس واطلع في الأوائل.</p></div>
     <div class="seg" id="per"><button data-p="week">الأسبوع ده</button><button class="on" data-p="month">الشهر ده</button><button data-p="all">من الأول</button></div>
-    <div class="list" id="lb"><p class="empty">جاري التحميل…</p></div>
+    <div class="list" id="lb">${SKEL}</div>
   </div>`);
   async function load(p) {
-    $('#lb').innerHTML = '<p class="empty">جاري التحميل…</p>';
+    $('#lb').innerHTML = SKEL;
     try {
       const rows = await rpc('leaderboard', { period: p });
       $('#lb').innerHTML = rows.length ? rows.map(r => `
         <div class="item ${r.is_me ? 'me' : ''}"><div class="withrank"><span class="rank ${r.pos <= 3 ? 'r' + r.pos : ''}">${num(r.pos)}</span>
           <div class="main"><b>${esc(r.name)}${r.is_me ? ' (إنت)' : ''}</b><span class="sub ltr">${esc(r.code)}</span></div></div>
           <div class="end"><span class="amt">${num(r.sales)} بيعة</span></div></div>`).join('')
-        : '<p class="empty">لسه مفيش بيعات في الفترة دي. كن أول واحد!</p>';
+        : emptyState('trophy', 'لسه مفيش بيعات في الفترة دي', 'أول بيعة هتحطك في المركز الأول. كن أول واحد!');
     } catch (m) { $('#lb').innerHTML = `<p class="err">${esc(m)}</p>`; }
   }
   $('#per').addEventListener('click', e => {
@@ -864,7 +889,7 @@ async function leadersPage() {
 async function newsPage() {
   loading();
   const rows = await q(sb.from('announcements').select('*').order('pinned', { ascending: false }).order('created_at', { ascending: false }).limit(60));
-  view(`<div class="card"><h1>الأخبار والتدريب</h1>${rows.length ? '' : '<p class="empty">مفيش أخبار لسه.</p>'}</div>
+  view(`<div class="card"><h1>الأخبار والتدريب</h1>${rows.length ? '' : emptyState('news', 'مفيش أخبار لسه', 'أي خبر أو تدريب جديد من الفريق هيظهر هنا.')}</div>
   ${rows.map(n => {
     const yt = ytEmbed(n.video_url);
     return `<div class="card">
@@ -1105,12 +1130,12 @@ async function aDashPage() {
     <div class="list" id="owed">${d.owed.length ? d.owed.map(m => `
       <div class="item"><div class="main"><b>${esc(m.name)} <span class="ltr sub">${esc(m.code)}</span></b><span class="sub">${esc(m.pay_method || '')} · <span class="ltr">${esc(m.pay_number || '')}</span>${m.payout_verified ? '' : ' · <span class="pill no">رقم مش متأكد</span>'}</span></div>
       <div class="end"><span class="amt">${money(m.balance)}</span><button class="btn sm gold" data-pay="${esc(m.code)}">حوّل</button></div></div>`).join('')
-      : '<p class="empty">مفيش عمولات مستحقة دلوقتي ✓</p>'}</div>
+      : emptyState('check', 'كل المسوقين خدوا فلوسهم ✓', 'مفيش عمولات مستحقة دلوقتي.')}</div>
   </div>
   <div class="card"><h2>آخر البيعات</h2>
     <div class="list">${d.recent.length ? d.recent.map(s => `
       <div class="item"><div class="main"><b>${esc(s.client_name)} · ${esc(s.service)}</b><span class="sub">${fdate(s.created_at)} · ${esc(s.name)} <span class="ltr">${esc(s.code)}</span>${s.created_by_name ? ' · سجّلها ' + esc(firstName(s.created_by_name)) : ''}</span></div>
-      <div class="end">${pill(s.status)}</div></div>`).join('') : '<p class="empty">لسه مفيش بيعات.</p>'}</div>
+      <div class="end">${pill(s.status)}</div></div>`).join('') : emptyState('coins', 'لسه مفيش بيعات', 'أول بيعة تتسجل هتظهر هنا.', '<a class="btn sm" href="#a-sale">سجّل بيعة</a>')}</div>
   </div>`);
   $('#d-ref').addEventListener('click', route);
   $('#owed').addEventListener('click', e => { const b = e.target.closest('[data-pay]'); if (b) { PREFILL = b.dataset.pay; location.hash = 'a-pay'; } });
@@ -1257,7 +1282,7 @@ function aPayPage() {
   <div class="card" id="pr">
     <div class="head"><h1>طلبات الصرف</h1><div class="seg sm" id="pr-tab"><button type="button" data-s="pending" class="on">مستنية</button><button type="button" data-s="">الكل</button></div></div>
     <p class="lead">المسوق بيطلب صرف رصيده من صفحة «بيعاتي». حوّله على الرقم اللي قدامك، وبعدين دوس «حوّلت». المسوق بيوصله إشعار على طول.</p>
-    <div class="list" id="pr-list"><p class="empty">جاري التحميل…</p></div>
+    <div class="list" id="pr-list">${SKEL}</div>
   </div>
   <form class="card" id="pf" novalidate>
     <div class="stack"><h1>تسجيل تحويل</h1><p class="lead">حوّل للمسوق الأول على إنستاباي أو فودافون كاش، وبعدين سجّل المبلغ هنا.</p></div>
@@ -1330,7 +1355,7 @@ function aPayPage() {
     try {
       const rows = await rpc('admin_payout_requests', { p_status: prSt || null });
       rows.forEach(r => { reqs[r.id] = r; });
-      box.innerHTML = rows.length ? rows.map(reqItem).join('') : `<p class="empty">${prSt ? 'مفيش طلبات صرف مستنية ✓' : 'لسه مفيش طلبات صرف.'}</p>`;
+      box.innerHTML = rows.length ? rows.map(reqItem).join('') : (prSt ? emptyState('check', 'مفيش طلبات صرف مستنية ✓', 'أول ما مسوق يطلب صرف، هيظهر هنا ويوصلك إشعار.') : emptyState('inbox', 'لسه مفيش طلبات صرف', ''));
       if (prSt === 'pending' && ME) { ME.payout_requests = rows.length; renderNav('a-pay'); }
     } catch (m) { box.innerHTML = `<p class="err">${esc(m)}</p>`; }
   }
@@ -1384,7 +1409,7 @@ function aMkPage() {
         <div class="item click" data-code="${esc(m.code)}"><div class="main"><b>${esc(m.name)}</b>
           <span class="sub"><span class="ltr">${esc(m.code)}</span> · ${esc(m.gov || '')} · <span class="ltr">${esc(m.phone)}</span> · ${num(m.sales_count)} بيعة${m.role !== 'marketer' ? ' · ' + esc(ROLES[m.role]) : ''}</span></div>
           <div class="end">${m.balance > 0 ? `<span class="amt">${money(m.balance)}</span>` : ''}${pill(m.status)}</div></div>`).join('');
-      res.innerHTML = append ? res.innerHTML + html : (html || '<p class="empty">مفيش نتايج.</p>');
+      res.innerHTML = append ? res.innerHTML + html : (html || emptyState('search', 'مفيش نتايج', 'اتأكد من الاسم أو الكود أو رقم الموبايل.'));
       $('#q-more').hidden = rows.length < 50;
       if (!append && rows.length === 1 && query) open(rows[0].code);
     } catch (m) { showErr($('#q-err'), m); }
@@ -1396,7 +1421,7 @@ function aMkPage() {
   else load(false);
 
   async function open(code) {
-    det.innerHTML = '<div class="card"><p class="empty">جاري التحميل…</p></div>';
+    det.innerHTML = `<div class="card">${SKEL}</div>`;
     det.scrollIntoView({ behavior: 'smooth', block: 'start' });
     let a;
     try { a = await rpc('admin_marketer', { p_code: code }); }
@@ -1611,7 +1636,7 @@ function aDataPage() {
       const r = await busy($('#d-go'), 'بندوّر…', () => rpc(FN[tab], Object.assign({}, args, { lim: 50, off })));
       if (!more) $('#d-sum').innerHTML = SUM[tab](r).map(([l, x], i) => `<div class="stat${i ? '' : ' hl'}"><small>${l}</small><b>${x}</b></div>`).join('');
       const html = r.rows.map(ROW[tab]).join('');
-      $('#d-rows').innerHTML = more ? $('#d-rows').innerHTML + html : (html || '<p class="empty">مفيش نتايج بالفلاتر دي.</p>');
+      $('#d-rows').innerHTML = more ? $('#d-rows').innerHTML + html : (html || emptyState('search', 'مفيش نتايج بالفلاتر دي', 'جرّب تغيّر البحث أو التاريخ.'));
       $('#d-more').hidden = r.rows.length < 50;
     } catch (m) { showErr($('#d-err'), m); }
   }
@@ -1678,7 +1703,7 @@ async function aTeamPage() {
     <div class="stack"><h1>الفريق</h1><p class="lead">${isSuper() ? 'كل الموظفين والأدمنز. من هنا بتتابع شغلهم، وترقّي، وتوزّع الموظفين على الأدمنز، وترفد.' : isAdmin() ? 'إنت والموظفين اللي تحتك. الترقية والرفد عند السوبر أدمن.' : 'شغلك إنت.'}</p></div>
     ${isSuper() ? `<p class="note">عشان تضيف موظف جديد: خليه يسجّل في الموقع عادي، وبعدين افتح حسابه من «المسوقين» وغيّر صلاحيته لـ «موظف» أو «أدمن».</p>` : ''}
   </div>
-  <div id="team" style="display:grid;gap:16px">${team.map(card).join('') || '<div class="card"><p class="empty">مفيش موظفين لسه.</p></div>'}</div>`);
+  <div id="team" style="display:grid;gap:16px">${team.map(card).join('') || `<div class="card">${emptyState('users', 'مفيش موظفين لسه', 'ضيف موظف من صفحة «المسوقين»: ابحث عنه وغيّر صلاحيته لموظف.')}</div>`}</div>`);
   const box = $('#team');
   box.addEventListener('click', async e => {
     const c = e.target.closest('[data-code]'); if (!c) return; const code = c.dataset.code;
@@ -1969,7 +1994,7 @@ async function leadsPage() {
         <span class="sub"><span class="ltr">${esc(r.client_phone)}</span> · ${esc(r.country)} · اتسجل ${fdate(r.created_at)}${r.source && r.source !== 'marketer' ? ' · ' + srcPill(r.source, SRC_MK) : ''}</span>
         ${chips(r.services)}</div>
         <div class="end">${leadPill(r.status)}${r.commission ? `<span class="amt">+${money(r.commission)}</span>` : ''}</div></div>`).join('')
-      : '<p class="empty">لسه ما سجلتش عملا. أول عميل مهتم، سجّله من الفورم اللي فوق.</p>'}</div>
+      : emptyState('inbox', 'لسه ما سجلتش عملا', 'أول عميل مهتم، سجّله من الفورم اللي فوق، أو خلّيه يسجّل بنفسه من رابطك.')}</div>
   </div>`);
   $('#lf2').addEventListener('submit', async e => {
     e.preventDefault(); showErr($('#ld-err'), '');
@@ -1991,7 +2016,7 @@ async function aLeadsPage() {
   view(`
   <div class="card">
     <div class="stack"><h1>طلبات العملا</h1><p class="lead">${isSuper() ? 'كل العملا اللي المسوقين سجّلوهم.' : isAdmin() ? 'الطلبات اللي لسه ما اتوزعتش، واللي عندك وعند موظفينك.' : 'الطلبات اللي متوزعة عليك.'} افتح أي طلب عشان تغيّر حالته${isAdmin() ? ' أو توزّعه' : ''}.</p></div>
-    <div class="seg" id="lt">${TABS.map(([k, l]) => `<button type="button" data-s="${k}"${k === st ? ' class="on"' : ''}>${l} <span class="cnt" data-c="${k}"></span></button>`).join('')}</div>
+    <div class="seg tabs-x" id="lt">${TABS.map(([k, l]) => `<button type="button" data-s="${k}"${k === st ? ' class="on"' : ''}>${l} <span class="cnt" data-c="${k}"></span></button>`).join('')}</div>
     <details class="callbox" id="cc">
       <summary><span class="cb-ic" aria-hidden="true">📞</span><span class="cb-tx"><b>عميل اتصل وقال كود مسوق؟</b><small>سجّله هنا، والطلب يتحسب للمسوق ويبقى معاك</small></span><span class="cb-go" aria-hidden="true"></span></summary>
       <form id="cf" novalidate>
@@ -2013,10 +2038,13 @@ async function aLeadsPage() {
         <button class="btn gold" id="cf-btn">سجّل الطلب</button>
       </form>
     </details>
-    <form id="lq" novalidate class="row3" style="align-items:end">
-      <label class="f">بحث <span class="opt">(عميل، بيزنس، موبايل)</span><input id="lq-q"></label>
-      <label class="f">كود المسوق<input id="lq-code" dir="ltr" placeholder="الكل"></label>
-      ${isAdmin() ? `<label class="f">الكول سنتر<select id="lq-as"><option value="">الكل</option><option value="none">مش متوزع</option>${team.map(t => `<option value="${esc(t.code)}">${esc(t.name)}</option>`).join('')}</select></label>` : '<span></span>'}
+    <form id="lq" novalidate class="row3 lq" style="align-items:end">
+      <div class="lq-search">
+        <label class="f">بحث <span class="opt">(عميل، بيزنس، موبايل)</span><input id="lq-q" type="search" placeholder="اكتب اسم أو رقم…"></label>
+        <button type="button" class="btn ghost lq-tg" id="lq-tg" aria-expanded="false" aria-controls="lq">فلاتر <span class="lq-n" id="lq-n" hidden></span></button>
+      </div>
+      <label class="f lq-x">كود المسوق<input id="lq-code" dir="ltr" placeholder="الكل"></label>
+      ${isAdmin() ? `<label class="f lq-x">الكول سنتر<select id="lq-as"><option value="">الكل</option><option value="none">مش متوزع</option>${team.map(t => `<option value="${esc(t.code)}">${esc(t.name)}</option>`).join('')}</select></label>` : '<span class="lq-x"></span>'}
       <button class="btn" id="lq-go" style="display:none">اعرض</button>
     </form>
   </div>
@@ -2027,7 +2055,7 @@ async function aLeadsPage() {
     <div class="tablewrap"><table class="tbl" id="l-tbl">
       <thead><tr><th>#</th><th>العميل</th><th>الخدمات</th><th>المسوق</th><th>الكول سنتر</th><th>الحالة</th><th>العمولة</th><th>اتسجل</th><th></th></tr></thead>
       <tbody></tbody></table></div>
-    <p class="empty" id="l-empty" hidden>مفيش طلبات هنا.</p>
+    <div id="l-empty" hidden>${emptyState('inbox', 'مفيش طلبات هنا', 'جرّب تبويب «الكل»، أو امسح البحث والفلاتر.')}</div>
     <button type="button" class="btn ghost sm" id="l-more" hidden>اعرض أكتر</button>
   </div>`);
   const tbody = $('#l-tbl tbody');
@@ -2115,8 +2143,13 @@ async function aLeadsPage() {
   $('#lt').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; st = b.dataset.s; $$('#lt button').forEach(x => x.classList.toggle('on', x === b)); run(false); });
   $('#lq').addEventListener('submit', e => { e.preventDefault(); run(false); });
   let tq; $('#lq-q').addEventListener('input', () => { clearTimeout(tq); tq = setTimeout(() => run(false), 400); });
-  $('#lq-code').addEventListener('change', () => run(false));
-  if ($('#lq-as')) $('#lq-as').addEventListener('change', () => run(false));
+  // الموبايل: الفلاتر مقفولة ورا زرار، وعليه عدد الفلاتر اللي شغالة
+  const filtCount = () => { const n = [$('#lq-code').value.trim(), $('#lq-as') ? $('#lq-as').value : ''].filter(Boolean).length; $('#lq-n').hidden = !n; $('#lq-n').textContent = n; };
+  $('#lq-tg').addEventListener('click', () => { const on = $('#lq').classList.toggle('show'); $('#lq-tg').setAttribute('aria-expanded', on); if (on) $('#lq-code').focus(); });
+  $('#lq-code').addEventListener('change', () => { filtCount(); run(false); });
+  if ($('#lq-as')) $('#lq-as').addEventListener('change', () => { filtCount(); run(false); });
+  // التبويب المختار يبان لما الشريط يتسحب على الموبايل
+  $('#lt').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (b) b.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); });
   $('#l-more').addEventListener('click', () => { off += 50; run(true); });
   // التصدير بنفس الفلاتر والتبويب اللي فاتحهم
   $('#l-exp').addEventListener('click', e => busy(e.currentTarget, 'بنجهّز…', async () => {
