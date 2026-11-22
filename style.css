@@ -193,6 +193,19 @@ a.guide-cta { display: flex; align-items: center; justify-content: space-between
 .refcode { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; background: var(--surface); border: 1.5px dashed var(--brand); border-radius: 12px; padding: 10px 14px; font-weight: 600; }
 .refcode b { font: 700 26px/1.1 var(--f-display); letter-spacing: 2px; color: var(--brand); }
 @media (prefers-color-scheme: dark) { .refcode b { color: #8EB0FF; } }
+/* الطلبات المتأخرة (جديد +24 ساعة) */
+.pill.late { background: var(--bad); color: #FFFFFF; }
+.tbl tr.lrow.late td { background: var(--bad-soft); }
+.tbl tr.lrow.late td:first-child { box-shadow: inset -4px 0 0 var(--bad); }
+.stat.late { background: var(--bad-soft); border-color: var(--bad); }
+.stat.late b, .stat.late small { color: var(--bad); }
+.nbadge.late, .tdot.late { background: var(--bad); color: #FFFFFF; }
+.seg button.alert:not(.on) { color: var(--bad); }
+@media (max-width: 760px) {
+  .tbl tr.lrow.late { background: var(--bad-soft); border-color: var(--bad); border-width: 1.5px; }
+  .tbl tr.lrow.late td { background: transparent; }
+  .tbl tr.lrow.late td:first-child { box-shadow: none; }
+}
 /* التواصل مع العميل من جوه الطلب */
 .lead-contact { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .lead-contact .btn svg { flex-shrink: 0; }

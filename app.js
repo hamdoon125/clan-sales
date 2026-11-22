@@ -256,7 +256,8 @@ function renderNav(current) {
     return;
   }
   const count = k => k === 'a-leads' && ME.new_leads > 0 ? num(ME.new_leads) : '';
-  const badge = k => count(k) ? ` <span class="nbadge">${count(k)}</span>` : '';
+  const late = k => k === 'a-leads' && ME.late_leads > 0 ? ' late' : '';
+  const badge = k => count(k) ? ` <span class="nbadge${late(k)}"${late(k) ? ` title="${num(ME.late_leads)} متأخر"` : ''}>${count(k)}</span>` : '';
   const link = k => `<a href="#${k}" class="${k === current ? 'on' : ''}">${ROUTES[k].nav}${badge(k)}</a>`;
   let groups;
   if (ME.role === 'marketer') {
@@ -276,7 +277,7 @@ function renderNav(current) {
   const all = groups.flatMap(g => g[1]), main = all.slice(0, 4), inMore = !main.includes(current);
   const moreCount = all.slice(4).map(count).filter(Boolean).length;
   tabbar.innerHTML = main.map(k => `<a href="#${k}" class="${k === current ? 'on' : ''}"${k === current ? ' aria-current="page"' : ''}>
-      <span class="ti">${icon(k)}${count(k) ? `<span class="tdot">${count(k)}</span>` : ''}</span><span class="tl">${ROUTES[k].nav}</span></a>`).join('')
+      <span class="ti">${icon(k)}${count(k) ? `<span class="tdot${late(k)}">${count(k)}</span>` : ''}</span><span class="tl">${ROUTES[k].nav}</span></a>`).join('')
     + `<button type="button" data-more class="${inMore ? 'on' : ''}" aria-haspopup="dialog">
       <span class="ti">${icon('more')}${moreCount ? '<span class="tdot dot"></span>' : ''}</span><span class="tl">${inMore && ROUTES[current] && ROUTES[current].nav || 'المزيد'}</span></button>`;
   tabbar.hidden = false; document.body.classList.add('has-tabbar');
@@ -1573,6 +1574,8 @@ const leadPill = s => `<span class="pill ${LEAD_CLS[s] || 'mid'}">${esc(LEAD_ST[
 // مصدر العميل: الفريق بيشوف كل المصادر، والمسوق بيشوف من رابطه أو اتصل بكوده
 const SRC_STAFF = { marketer: '👤 المسوق سجّله', link: '🔗 من الرابط', call: '📞 من الكول سنتر' };
 const SRC_MK = { link: '🔗 من رابطك', call: '📞 اتصل وقال كودك' };
+// من امتى الطلب مستني (للطلبات المتأخرة)
+const lateAge = h => h < 48 ? `${num(h)} ساعة` : `${num(Math.floor(h / 24))} يوم`;
 const srcPill = (s, map) => s && s !== 'marketer' && map[s] ? `<span class="pill gold">${map[s]}</span>` : '';
 const chips = arr => `<span class="chips">${(arr || []).map(x => `<span class="chip">${esc(x)}</span>`).join('')}</span>`;
 const PICKABLE = () => SERVICES.filter(s => s !== 'أكتر من خدمة');
@@ -1630,7 +1633,7 @@ async function aLeadsPage() {
   let st = 'open', off = 0, args = {};
   const team = isAdmin() ? await rpc('staff_team').catch(() => []) : [];
   const staffOpts = sel => `<option value="">مش متوزع</option>${team.filter(t => t.status === 'active').map(t => `<option value="${esc(t.code)}"${t.code === sel ? ' selected' : ''}>${esc(t.name)} (${esc(ROLES[t.role])})</option>`).join('')}`;
-  const TABS = [['open', 'لسه مفتوحة'], ['new', 'جديد'], ['contacted', 'اتكلمنا معاه'], ['negotiating', 'بنتفاوض'], ['won', 'تم الديل'], ['lost', 'مش مهتم'], ['', 'الكل']];
+  const TABS = [['open', 'لسه مفتوحة'], ['late', '⏰ متأخرة'], ['new', 'جديد'], ['contacted', 'اتكلمنا معاه'], ['negotiating', 'بنتفاوض'], ['won', 'تم الديل'], ['lost', 'مش مهتم'], ['', 'الكل']];
   view(`
   <div class="card">
     <div class="stack"><h1>طلبات العملا</h1><p class="lead">${isSuper() ? 'كل العملا اللي المسوقين سجّلوهم.' : isAdmin() ? 'الطلبات اللي لسه ما اتوزعتش، واللي عندك وعند موظفينك.' : 'الطلبات اللي متوزعة عليك.'} افتح أي طلب عشان تغيّر حالته${isAdmin() ? ' أو توزّعه' : ''}.</p></div>
@@ -1675,13 +1678,13 @@ async function aLeadsPage() {
   const tbody = $('#l-tbl tbody');
   let data = {};
   const row = r => `
-    <tr data-id="${r.id}" class="lrow">
+    <tr data-id="${r.id}" class="lrow${r.overdue ? ' late' : ''}">
       <td class="ltr c-id">${esc(r.id)}</td>
       <td class="c-client"><b>${esc(r.client_name)}</b> ${srcPill(r.source, SRC_STAFF)}${r.business ? `<div class="sub">${esc(r.business)}</div>` : ''}<div class="sub ltr">${esc(r.client_phone)}</div></td>
       <td data-l="الخدمات">${chips(r.services)}</td>
       <td data-l="المسوق">${esc(firstName(r.marketer_name))} <span class="sub ltr">${esc(r.code)}</span></td>
       <td data-l="الكول سنتر">${r.assigned_name ? esc(firstName(r.assigned_name)) : '<span class="sub">مش متوزع</span>'}</td>
-      <td data-l="الحالة" class="c-status">${leadPill(r.status)}</td>
+      <td data-l="الحالة" class="c-status">${leadPill(r.status)}${r.overdue ? ` <span class="pill late">⏰ متأخر ${lateAge(r.age_hours)}</span>` : ''}</td>
       <td data-l="العمولة" class="amt">${r.commission ? money(r.commission) : '—'}</td>
       <td data-l="اتسجل" class="sub">${fdate(r.created_at)}</td>
       <td class="c-open"><button type="button" class="btn sm ghost" data-open="${r.id}">افتح</button></td>
@@ -1718,8 +1721,10 @@ async function aLeadsPage() {
       const r = await rpc('staff_leads_query', Object.assign({}, args, { lim: 50, off }));
       const c = r.counts || {};
       const open = (c.new || 0) + (c.contacted || 0) + (c.negotiating || 0);
-      $$('#lt .cnt').forEach(el => { const k = el.dataset.c; const n = k === 'open' ? open : k === '' ? Object.values(c).reduce((a, b) => a + b, 0) : (c[k] || 0); el.textContent = n ? `(${num(n)})` : ''; });
-      if (!more) $('#l-sum').innerHTML = `<div class="stat hl"><small>لسه مفتوحة</small><b>${num(open)}</b></div><div class="stat"><small>تم الديل</small><b>${num(c.won || 0)}</b></div><div class="stat"><small>مش مهتم</small><b>${num(c.lost || 0)}</b></div><div class="stat"><small>عمولات النتايج دي</small><b>${money(r.commission)}</b></div>`;
+      const all = Object.entries(c).filter(([k]) => k !== 'late').reduce((a, [, b]) => a + b, 0);
+      $$('#lt .cnt').forEach(el => { const k = el.dataset.c; const n = k === 'open' ? open : k === '' ? all : (c[k] || 0); el.textContent = n ? `(${num(n)})` : ''; });
+      const lateTab = $('#lt [data-s="late"]'); if (lateTab) lateTab.classList.toggle('alert', (c.late || 0) > 0);
+      if (!more) $('#l-sum').innerHTML = `${c.late ? `<div class="stat late"><small>⏰ متأخرة +24 ساعة</small><b>${num(c.late)}</b></div>` : ''}<div class="stat hl"><small>لسه مفتوحة</small><b>${num(open)}</b></div><div class="stat"><small>تم الديل</small><b>${num(c.won || 0)}</b></div><div class="stat"><small>مش مهتم</small><b>${num(c.lost || 0)}</b></div><div class="stat"><small>عمولات النتايج دي</small><b>${money(r.commission)}</b></div>`;
       r.rows.forEach(x => { data[x.id] = x; });
       const html = r.rows.map(row).join('');
       tbody.innerHTML = more ? tbody.innerHTML + html : html;
