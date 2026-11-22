@@ -213,15 +213,6 @@ a.guide-cta { display: flex; align-items: center; justify-content: space-between
 .btn.wa:hover { background: #157A42; }
 @media (max-width: 760px) { .lead-contact .btn { flex: 1 1 auto; } .lead-contact .btn.wa { flex-basis: 100%; } }
 /* الكول سنتر */
-.callbox { border: 1.5px dashed var(--line); border-radius: 12px; background: var(--sunk); }
-.callbox[open] { border-style: solid; border-color: var(--gold); }
-.callbox summary { cursor: pointer; list-style: none; padding: 12px 14px; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.callbox summary::-webkit-details-marker { display: none; }
-.callbox summary::after { content: "+"; font: 700 20px/1 var(--f-display); color: var(--brand); flex-shrink: 0; }
-.callbox[open] summary::after { content: "−"; }
-.callbox summary > span { display: grid; gap: 2px; }
-.callbox summary small { font-size: 13px; font-weight: 400; }
-.callbox form { padding: 0 14px 14px; }
 /* خانة فخ للبوتات: مستخبية عن الناس */
 .trap { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; opacity: 0; pointer-events: none; }
 
@@ -431,3 +422,23 @@ form.reqbox { display: grid; justify-content: stretch; }
 
 /* مسح طلب (السوبر) */
 .ldel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; border-top: 1px dashed var(--line); padding-top: 12px; font-size: 13px; }
+
+/* خانة «عميل اتصل وقال كود مسوق»: مميزة عن باقي الصفحة */
+.callbox { border: 1.5px solid var(--gold); border-inline-start-width: 6px; border-radius: 14px; background: var(--gold-soft); }
+.callbox summary { cursor: pointer; list-style: none; padding: 14px; min-height: 56px; display: flex; align-items: center; gap: 12px; }
+.callbox summary::-webkit-details-marker { display: none; }
+.callbox .cb-ic { width: 44px; height: 44px; border-radius: 50%; background: var(--gold); display: grid; place-items: center; font-size: 20px; flex-shrink: 0; }
+.callbox .cb-tx { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.callbox .cb-tx b { font-size: 16px; }
+.callbox .cb-tx small { font-size: 13px; color: var(--muted); }
+.callbox .cb-go { flex-shrink: 0; background: var(--brand); color: var(--on-brand); font: 700 14px var(--f-body); border-radius: 10px; padding: 8px 14px; white-space: nowrap; }
+.callbox .cb-go::before { content: "سجّل عميل +"; }
+.callbox[open] .cb-go { background: transparent; color: var(--text); border: 1.5px solid var(--line); }
+.callbox[open] .cb-go::before { content: "اقفل ✕"; }
+.callbox summary:hover .cb-go { filter: brightness(1.08); }
+.callbox[open] summary { border-bottom: 1px solid color-mix(in srgb, var(--gold) 40%, transparent); }
+.callbox form { padding: 14px; background: var(--surface); border-radius: 0 0 12px 12px; }
+@media (max-width: 760px) {
+  .callbox summary { flex-wrap: wrap; }
+  .callbox .cb-go { flex-basis: 100%; text-align: center; padding: 10px 14px; }
+}

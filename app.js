@@ -1993,7 +1993,7 @@ async function aLeadsPage() {
     <div class="stack"><h1>طلبات العملا</h1><p class="lead">${isSuper() ? 'كل العملا اللي المسوقين سجّلوهم.' : isAdmin() ? 'الطلبات اللي لسه ما اتوزعتش، واللي عندك وعند موظفينك.' : 'الطلبات اللي متوزعة عليك.'} افتح أي طلب عشان تغيّر حالته${isAdmin() ? ' أو توزّعه' : ''}.</p></div>
     <div class="seg" id="lt">${TABS.map(([k, l]) => `<button type="button" data-s="${k}"${k === st ? ' class="on"' : ''}>${l} <span class="cnt" data-c="${k}"></span></button>`).join('')}</div>
     <details class="callbox" id="cc">
-      <summary><span><b>📞 عميل اتصل وقال كود مسوق؟</b><small class="muted">سجّله هنا، والطلب يتحسب للمسوق ويبقى معاك</small></span></summary>
+      <summary><span class="cb-ic" aria-hidden="true">📞</span><span class="cb-tx"><b>عميل اتصل وقال كود مسوق؟</b><small>سجّله هنا، والطلب يتحسب للمسوق ويبقى معاك</small></span><span class="cb-go" aria-hidden="true"></span></summary>
       <form id="cf" novalidate>
         <label class="f">كود المسوق اللي العميل قاله<input id="cf-code" dir="ltr" autocomplete="off" placeholder="M001"></label>
         <div class="peek" id="cf-peek" hidden></div>
