@@ -17,10 +17,10 @@ const METHODS = ['إنستاباي','فودافون كاش'];
 const KINDS = { script: 'سكريبتات', reply: 'ردود جاهزة', story: 'ستوري', tip: 'نصايح' };          // بتظهر في «المحتوى»
 const GUIDE_KINDS = { guide: 'الدليل: ابدأ إزاي', first: 'الدليل: أول عميل', faq: 'الدليل: سؤال شائع' }; // بتظهر في «الدليل»
 const ALL_KINDS = Object.assign({}, KINDS, GUIDE_KINDS);
-const ROLES = { marketer: 'مسوق', employee: 'موظف', admin: 'أدمن', super_admin: 'سوبر أدمن' };
-const STAFF = ['employee', 'admin', 'super_admin'];
-const ADMINS = ['admin', 'super_admin'];
-const SUPER = ['super_admin'];
+const ROLES = { marketer: 'مسوق', employee: 'موظف', admin: 'أدمن', super_admin: 'سوبر أدمن', ceo: 'CEO' };
+const STAFF = ['employee', 'admin', 'super_admin', 'ceo'];
+const ADMINS = ['admin', 'super_admin', 'ceo'];
+const SUPER = ['super_admin', 'ceo'];
 const MIN_PW = 8;
 // نسخة الشروط: لو عدّلت نص الشروط غيّر التاريخ ده، وكل المسوقين هيتطلب منهم يوافقوا تاني
 const TERMS_VERSION = '2026-11-22';
@@ -35,7 +35,7 @@ const ACTIONS = {
 };
 const isStaff = () => ME && STAFF.includes(ME.role);
 const isAdmin = () => ME && ADMINS.includes(ME.role);
-const isSuper = () => ME && ME.role === 'super_admin';
+const isSuper = () => ME && SUPER.includes(ME.role);
 
 const main = document.getElementById('main');
 const navEl = document.getElementById('nav');
@@ -1735,7 +1735,7 @@ async function aTeamPage() {
         <button class="btn sm ghost" data-log="${esc(t.code)}">سجل عملياته</button>
       </div>
       ${canManage ? `<div class="row3">
-        <label class="f">الصلاحية<select data-role>${['employee', 'admin', 'super_admin'].map(k => `<option value="${k}"${k === t.role ? ' selected' : ''}>${ROLES[k]}</option>`).join('')}</select></label>
+        <label class="f">الصلاحية<select data-role>${STAFF.map(k => `<option value="${k}"${k === t.role ? ' selected' : ''}>${ROLES[k]}</option>`).join('')}</select></label>
         ${t.role === 'employee' ? `<label class="f">تبع أنهي أدمن<select data-mgr><option value="">من غير أدمن</option>${admins.map(a => `<option value="${esc(a.code)}"${a.code === t.manager_code ? ' selected' : ''}>${esc(a.name)} (${esc(a.code)})</option>`).join('')}</select></label>` : '<span></span>'}
         <label class="f">باسورد جديد<span style="display:flex;gap:8px"><input data-pw type="password" dir="ltr" autocomplete="new-password"><button type="button" class="btn sm" data-pw-btn>غيّر</button></span></label>
       </div>
